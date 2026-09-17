@@ -107,7 +107,8 @@ pub struct PublicationPlan {
 impl PublicationPlan {
     pub fn build(changes: &[AnyChange], remote_refs: &RemoteRefs) -> Result<Self> {
         let repo = env::get().repo()?;
-        let mut parent_oid = remote_refs.require(&branch_ref(env::get().base_branch()))?;
+        let first = changes.last().context("cannot publish an empty stack")?;
+        let mut parent_oid = repo.find_commit(first.local_change().oid)?.parent_id(0)?;
         let mut updates = Vec::with_capacity(changes.len());
 
         for change in changes.iter().rev() {
