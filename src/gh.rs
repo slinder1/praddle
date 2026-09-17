@@ -206,8 +206,8 @@ fn rest_api_empty(method: &str, endpoint: String, body: Option<&[u64]>) -> Resul
     }
     let mut cmd = gh();
     cmd.args(args);
+    print_cmd_and_files(&cmd, input.as_ref().into_iter().map(|(_, file)| file))?;
     if env::get().dry_run() {
-        print_cmd_and_files(&cmd, input.as_ref().into_iter().map(|(_, file)| file))?;
         return Ok(());
     }
     exec(&mut cmd)?;
@@ -227,8 +227,8 @@ fn unstack(endpoint: String) -> Result<()> {
         "X-GitHub-Api-Version: 2026-03-10",
         "--include",
     ]);
+    print_cmd_and_files(&cmd, std::iter::empty())?;
     if env::get().dry_run() {
-        print_cmd_and_files(&cmd, std::iter::empty())?;
         return Ok(());
     }
     let output = exec(&mut cmd)?;
@@ -353,9 +353,8 @@ impl Pr {
         };
         let args = self.args_for("ready", opts)?;
         cmd.args(args);
-        if env::get().dry_run() {
-            print_cmd_and_files(&cmd, std::iter::empty())?;
-        } else {
+        print_cmd_and_files(&cmd, std::iter::empty())?;
+        if !env::get().dry_run() {
             exec(&mut cmd)?;
         }
         self.draft = draft;
@@ -369,9 +368,8 @@ impl Pr {
         let mut cmd = gh();
         let args = self.args_for("edit", [format!("--base={base}")])?;
         cmd.args(args);
-        if env::get().dry_run() {
-            print_cmd_and_files(&cmd, std::iter::empty())?;
-        } else {
+        print_cmd_and_files(&cmd, std::iter::empty())?;
+        if !env::get().dry_run() {
             exec(&mut cmd)?;
         }
         self.base_ref_name = base.to_owned();
@@ -386,9 +384,8 @@ impl Pr {
         let mut cmd = gh();
         let args = self.args_for("edit", [format!("--title={title}"), body_arg.arg(body)?])?;
         cmd.args(args);
-        if env::get().dry_run() {
-            print_cmd_and_files(&cmd, body_arg.file.iter())?;
-        } else {
+        print_cmd_and_files(&cmd, body_arg.file.iter())?;
+        if !env::get().dry_run() {
             exec(&mut cmd)?;
         }
         self.title = title.to_owned();
@@ -412,8 +409,8 @@ impl Pr {
         let mut cmd = gh();
         let args = self.args_for("comment", [body_arg.arg(comment)?])?;
         cmd.args(args);
+        print_cmd_and_files(&cmd, body_arg.file.iter())?;
         if env::get().dry_run() {
-            print_cmd_and_files(&cmd, body_arg.file.iter())?;
             return Ok(());
         }
         exec(&mut cmd)?;
@@ -427,8 +424,8 @@ impl Pr {
         let mut cmd = gh();
         let args = self.args_for("edit", [format!("--add-reviewer={}", reviewers.join(","))])?;
         cmd.args(args);
+        print_cmd_and_files(&cmd, std::iter::empty())?;
         if env::get().dry_run() {
-            print_cmd_and_files(&cmd, std::iter::empty())?;
             return Ok(());
         }
         exec(&mut cmd)?;
@@ -464,8 +461,8 @@ impl Pr {
             format!("--head={remote_branch_ref}"),
         ];
         cmd.args(args);
+        print_cmd_and_files(&cmd, body_arg.file.iter())?;
         let output = if env::get().dry_run() {
-            print_cmd_and_files(&cmd, body_arg.file.iter())?;
             let mock_pr = Pr::mock(title, body, base, &remote_branch_ref);
             eprintln!("mock-pr-for-change-{}: {}", local_change.id, mock_pr.number);
             return Ok(mock_pr);

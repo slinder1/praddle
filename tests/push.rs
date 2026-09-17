@@ -790,6 +790,89 @@ async fn unstacks_before_inserting_a_change_between_existing_prs() {
     );
 }
 
+async fn assert_push_mode(dry_run: bool, verbosity: u8) {
+    let harness = TestHarness::start("alice", "widgets").await.unwrap();
+    harness.write("feature", "content\n").unwrap();
+    harness.git(["add", "feature"]).unwrap();
+    harness
+        .git(["commit", "-m", "Add feature", "-m", "Change-Id: I0001"])
+        .unwrap();
+
+    let mut command = harness.command(env!("CARGO_BIN_EXE_praddle"));
+    command.args([
+        "--remote=origin",
+        "--base-branch=main",
+        "--user-branch-prefix=users/alice/",
+        "--serial",
+    ]);
+    if dry_run {
+        command.arg("--dry-run");
+    }
+    command.arg(format!("--verbose={verbosity}"));
+    command.arg("push");
+
+    let output = command.output().unwrap();
+    assert!(
+        output.status.success(),
+        "praddle failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(
+        stderr.contains("would-exec:"),
+        dry_run,
+        "dry_run={dry_run}, verbosity={verbosity}\nstderr:\n{stderr}"
+    );
+    let echoes_commands = dry_run || verbosity > 0;
+    assert_eq!(
+        stderr.contains("file-contents-"),
+        echoes_commands,
+        "dry_run={dry_run}, verbosity={verbosity}\nstderr:\n{stderr}"
+    );
+    assert_eq!(
+        stderr.contains("Change-Id: I0001"),
+        echoes_commands,
+        "dry_run={dry_run}, verbosity={verbosity}\nstderr:\n{stderr}"
+    );
+    assert_eq!(
+        harness.snapshot().pull_requests.is_empty(),
+        dry_run,
+        "dry_run={dry_run}, verbosity={verbosity}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn quiet_run_executes_without_echoing() {
+    assert_push_mode(false, 0).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn verbose_run_executes_and_echoes() {
+    assert_push_mode(false, 1).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn very_verbose_run_executes_and_echoes() {
+    assert_push_mode(false, 2).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn quiet_dry_run_skips_execution_and_echoes() {
+    assert_push_mode(true, 0).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn verbose_dry_run_skips_execution_and_echoes() {
+    assert_push_mode(true, 1).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn very_verbose_dry_run_skips_execution_and_echoes() {
+    assert_push_mode(true, 2).await;
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn misc() {
     let harness = TestHarness::start("alice", "widgets").await.unwrap();
