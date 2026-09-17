@@ -829,6 +829,12 @@ fn rest_api(state: &AppState, method: Method, path: &str, body: &[u8]) -> HttpRe
     let parts: Vec<&str> = path.trim_matches('/').split('/').collect();
     if parts.as_slice() == ["stacks"] && method == Method::POST {
         let numbers = pull_request_numbers(body)?;
+        if numbers.len() < 2 {
+            return Err((
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "a stack requires at least two pull requests".into(),
+            ));
+        }
         let mut model = state.model.lock().unwrap();
         let stack = model.next_stack;
         model.next_stack += 1;

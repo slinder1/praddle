@@ -99,113 +99,80 @@ async fn ignores_duplicate_change_ids_outside_the_current_stack() {
 
     let snapshot = harness.snapshot();
     assert_eq!(snapshot.pull_requests.len(), 3);
-    assert_eq!(snapshot.stacks, [(1, vec![3])].into());
+    assert!(snapshot.stacks.is_empty());
     assert_eq!(snapshot.pull_requests[2].title, "Current change");
+    assert_eq!(snapshot.pull_requests[2].stack, None);
+    assert_eq!(snapshot.pull_requests[2].stack_position, None);
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn extends_a_stack_when_a_second_change_is_pushed() {
+async fn creates_a_stack_when_two_changes_are_pushed() {
     let harness = TestHarness::start("alice", "widgets").await.unwrap();
-    harness.write("first", "first\n").unwrap();
-    harness.git(["add", "first"]).unwrap();
-    harness
-        .git([
-            "commit",
-            "-m",
-            "First change",
-            "-m",
-            "First body",
-            "-m",
-            "Change-Id: I0001",
-        ])
-        .unwrap();
+    for (path, title, change_id) in [
+        ("first", "First change", "I0001"),
+        ("second", "Second change", "I0002"),
+    ] {
+        harness.write(path, format!("{path}\n")).unwrap();
+        harness.git(["add", path]).unwrap();
+        harness
+            .git([
+                "commit",
+                "-m",
+                title,
+                "-m",
+                &format!("Change-Id: {change_id}"),
+            ])
+            .unwrap();
+    }
 
     push(&harness);
 
     let snapshot = harness.snapshot();
-    assert_eq!(snapshot.stacks, [(1, vec![1])].into());
-    assert_eq!(snapshot.pull_requests.len(), 1);
-    let first = &snapshot.pull_requests[0];
-    assert_eq!(first.title, "First change");
-    assert_eq!(first.body, "First body\n\nChange-Id: I0001");
-    assert_eq!(first.base_ref_name, "main");
-    assert_eq!(first.head_ref_name, "refs/heads/users/alice/I0001");
-    assert_eq!(first.stack, Some(1));
-    assert_eq!(first.stack_position, Some(1));
-    assert_eq!(first.comments, [initial_comment("first", "first")]);
-
-    harness.write("second", "second\n").unwrap();
-    harness.git(["add", "second"]).unwrap();
-    harness
-        .git([
-            "commit",
-            "-m",
-            "Second change",
-            "-m",
-            "Second body",
-            "-m",
-            "Change-Id: I0002",
-        ])
+    assert_eq!(snapshot.stacks, [(1, vec![2, 1])].into());
+    let first = snapshot
+        .pull_requests
+        .iter()
+        .find(|pr| pr.title == "First change")
         .unwrap();
-
-    push(&harness);
-
-    let snapshot = harness.snapshot();
-    assert_eq!(snapshot.stacks, [(1, vec![1, 2])].into());
-    assert_eq!(snapshot.pull_requests.len(), 2);
-    let first = &snapshot.pull_requests[0];
-    assert_eq!(first.title, "First change");
-    assert_eq!(first.body, "First body\n\nChange-Id: I0001");
-    assert_eq!(first.base_ref_name, "main");
-    assert_eq!(first.comments, [initial_comment("first", "first")]);
     assert_eq!(first.stack, Some(1));
     assert_eq!(first.stack_position, Some(1));
-    let second = &snapshot.pull_requests[1];
-    assert_eq!(second.title, "Second change");
-    assert_eq!(second.body, "Second body\n\nChange-Id: I0002");
-    assert_eq!(second.base_ref_name, "users/alice/I0001");
-    assert_eq!(second.head_ref_name, "refs/heads/users/alice/I0002");
+    let second = snapshot
+        .pull_requests
+        .iter()
+        .find(|pr| pr.title == "Second change")
+        .unwrap();
     assert_eq!(second.stack, Some(1));
     assert_eq!(second.stack_position, Some(2));
-    assert_eq!(second.comments, [initial_comment("second", "second")]);
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn extends_a_stack_with_two_changes_in_one_push() {
+async fn extends_a_stack_when_another_change_is_pushed() {
     let harness = TestHarness::start("alice", "widgets").await.unwrap();
-    harness.write("first", "first\n").unwrap();
-    harness.git(["add", "first"]).unwrap();
-    harness
-        .git([
-            "commit",
-            "-m",
-            "First change",
-            "-m",
-            "First body",
-            "-m",
-            "Change-Id: I0001",
-        ])
-        .unwrap();
+    for (path, title, body, change_id) in [
+        ("first", "First change", "First body", "I0001"),
+        ("second", "Second change", "Second body", "I0002"),
+    ] {
+        harness.write(path, format!("{path}\n")).unwrap();
+        harness.git(["add", path]).unwrap();
+        harness
+            .git([
+                "commit",
+                "-m",
+                title,
+                "-m",
+                body,
+                "-m",
+                &format!("Change-Id: {change_id}"),
+            ])
+            .unwrap();
+    }
 
     push(&harness);
 
     let snapshot = harness.snapshot();
-    assert_eq!(snapshot.stacks, [(1, vec![1])].into());
-    assert_eq!(snapshot.pull_requests.len(), 1);
+    assert_eq!(snapshot.stacks, [(1, vec![2, 1])].into());
+    assert_eq!(snapshot.pull_requests.len(), 2);
 
-    harness.write("second", "second\n").unwrap();
-    harness.git(["add", "second"]).unwrap();
-    harness
-        .git([
-            "commit",
-            "-m",
-            "Second change",
-            "-m",
-            "Second body",
-            "-m",
-            "Change-Id: I0002",
-        ])
-        .unwrap();
     harness.write("third", "third\n").unwrap();
     harness.git(["add", "third"]).unwrap();
     harness
@@ -223,26 +190,97 @@ async fn extends_a_stack_with_two_changes_in_one_push() {
     push(&harness);
 
     let snapshot = harness.snapshot();
-    assert_eq!(snapshot.stacks, [(1, vec![1, 3, 2])].into());
+    assert_eq!(snapshot.stacks, [(1, vec![2, 1, 3])].into());
     assert_eq!(snapshot.pull_requests.len(), 3);
-    let first = &snapshot.pull_requests[0];
-    assert_eq!(first.title, "First change");
-    assert_eq!(first.body, "First body\n\nChange-Id: I0001");
-    assert_eq!(first.base_ref_name, "main");
-    assert_eq!(first.comments, [initial_comment("first", "first")]);
-    assert_eq!(first.stack_position, Some(1));
-    let third = &snapshot.pull_requests[1];
-    assert_eq!(third.title, "Third change");
-    assert_eq!(third.body, "Third body\n\nChange-Id: I0003");
-    assert_eq!(third.base_ref_name, "users/alice/I0002");
-    assert_eq!(third.comments, [initial_comment("third", "third")]);
-    assert_eq!(third.stack_position, Some(3));
-    let second = &snapshot.pull_requests[2];
-    assert_eq!(second.title, "Second change");
-    assert_eq!(second.body, "Second body\n\nChange-Id: I0002");
-    assert_eq!(second.base_ref_name, "users/alice/I0001");
-    assert_eq!(second.comments, [initial_comment("second", "second")]);
-    assert_eq!(second.stack_position, Some(2));
+    for (title, base, position) in [
+        ("First change", "main", 1),
+        ("Second change", "users/alice/I0001", 2),
+        ("Third change", "users/alice/I0002", 3),
+    ] {
+        let pr = snapshot
+            .pull_requests
+            .iter()
+            .find(|pr| pr.title == title)
+            .unwrap();
+        assert_eq!(pr.base_ref_name, base);
+        assert_eq!(pr.stack, Some(1));
+        assert_eq!(pr.stack_position, Some(position));
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn extends_a_stack_with_two_changes_in_one_push() {
+    let harness = TestHarness::start("alice", "widgets").await.unwrap();
+    for (path, title, change_id) in [
+        ("first", "First change", "I0001"),
+        ("second", "Second change", "I0002"),
+    ] {
+        harness.write(path, format!("{path}\n")).unwrap();
+        harness.git(["add", path]).unwrap();
+        harness
+            .git([
+                "commit",
+                "-m",
+                title,
+                "-m",
+                &format!("Change-Id: {change_id}"),
+            ])
+            .unwrap();
+    }
+
+    push(&harness);
+
+    let snapshot = harness.snapshot();
+    assert_eq!(snapshot.stacks, [(1, vec![2, 1])].into());
+    assert_eq!(snapshot.pull_requests.len(), 2);
+
+    harness.write("third", "third\n").unwrap();
+    harness.git(["add", "third"]).unwrap();
+    harness
+        .git([
+            "commit",
+            "-m",
+            "Third change",
+            "-m",
+            "Third body",
+            "-m",
+            "Change-Id: I0003",
+        ])
+        .unwrap();
+    harness.write("fourth", "fourth\n").unwrap();
+    harness.git(["add", "fourth"]).unwrap();
+    harness
+        .git([
+            "commit",
+            "-m",
+            "Fourth change",
+            "-m",
+            "Fourth body",
+            "-m",
+            "Change-Id: I0004",
+        ])
+        .unwrap();
+
+    push(&harness);
+
+    let snapshot = harness.snapshot();
+    assert_eq!(snapshot.stacks, [(1, vec![2, 1, 4, 3])].into());
+    assert_eq!(snapshot.pull_requests.len(), 4);
+    for (title, base, position) in [
+        ("First change", "main", 1),
+        ("Second change", "users/alice/I0001", 2),
+        ("Third change", "users/alice/I0002", 3),
+        ("Fourth change", "users/alice/I0003", 4),
+    ] {
+        let pr = snapshot
+            .pull_requests
+            .iter()
+            .find(|pr| pr.title == title)
+            .unwrap();
+        assert_eq!(pr.base_ref_name, base);
+        assert_eq!(pr.stack, Some(1));
+        assert_eq!(pr.stack_position, Some(position));
+    }
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -314,13 +352,6 @@ async fn restores_remote_refs_when_pr_reconciliation_fails() {
     harness
         .git(["push", "origin", "refs/heads/main:refs/heads/auxiliary"])
         .unwrap();
-    let mut unstack = harness.command("gh");
-    unstack.args([
-        "api",
-        "--method=POST",
-        "repos/alice/widgets/stacks/1/unstack",
-    ]);
-    assert!(unstack.output().unwrap().status.success());
     let mut edit = harness.command("gh");
     edit.args([
         "pr",
@@ -370,7 +401,9 @@ async fn restores_remote_refs_when_pr_reconciliation_fails() {
             interdiff_comment("change", "before", "after"),
         ]
     );
-    assert_eq!(snapshot.stacks, [(2, vec![1])].into());
+    assert!(snapshot.stacks.is_empty());
+    assert_eq!(snapshot.pull_requests[0].stack, None);
+    assert_eq!(snapshot.pull_requests[0].stack_position, None);
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -398,7 +431,7 @@ async fn updates_a_change_when_it_is_edited_and_pushed_again() {
     assert_eq!(harness.remote_branch_refs().unwrap(), expected_remote_refs);
 
     let snapshot = harness.snapshot();
-    assert_eq!(snapshot.stacks, [(1, vec![1])].into());
+    assert!(snapshot.stacks.is_empty());
     assert_eq!(snapshot.pull_requests.len(), 1);
     let change = &snapshot.pull_requests[0];
     assert_eq!(change.title, "Initial title");
@@ -406,8 +439,8 @@ async fn updates_a_change_when_it_is_edited_and_pushed_again() {
     assert_eq!(change.base_ref_name, "main");
     assert_eq!(change.head_ref_name, "refs/heads/users/alice/I0001");
     assert_eq!(change.comments, [initial_comment("change", "before")]);
-    assert_eq!(change.stack, Some(1));
-    assert_eq!(change.stack_position, Some(1));
+    assert_eq!(change.stack, None);
+    assert_eq!(change.stack_position, None);
     let old_remote_head = harness
         .remote_ref_oid("refs/heads/users/alice/I0001")
         .unwrap()
@@ -446,7 +479,7 @@ async fn updates_a_change_when_it_is_edited_and_pushed_again() {
     assert_eq!(local_refs(&harness), refs_before_update);
 
     let snapshot = harness.snapshot();
-    assert_eq!(snapshot.stacks, [(1, vec![1])].into());
+    assert!(snapshot.stacks.is_empty());
     assert_eq!(snapshot.pull_requests.len(), 1);
     let change = &snapshot.pull_requests[0];
     assert_eq!(change.title, "Updated title");
@@ -460,8 +493,8 @@ async fn updates_a_change_when_it_is_edited_and_pushed_again() {
             interdiff_comment("change", "before", "after"),
         ]
     );
-    assert_eq!(change.stack, Some(1));
-    assert_eq!(change.stack_position, Some(1));
+    assert_eq!(change.stack, None);
+    assert_eq!(change.stack_position, None);
     let new_remote_head = harness
         .remote_ref_oid("refs/heads/users/alice/I0001")
         .unwrap()
@@ -826,9 +859,8 @@ async fn assert_push_mode(dry_run: bool, verbosity: u8) {
         "dry_run={dry_run}, verbosity={verbosity}\nstderr:\n{stderr}"
     );
     let echoes_commands = dry_run || verbosity > 0;
-    assert_eq!(
-        stderr.contains("file-contents-"),
-        echoes_commands,
+    assert!(
+        !stderr.contains("file-contents-"),
         "dry_run={dry_run}, verbosity={verbosity}\nstderr:\n{stderr}"
     );
     assert_eq!(
@@ -836,11 +868,17 @@ async fn assert_push_mode(dry_run: bool, verbosity: u8) {
         echoes_commands,
         "dry_run={dry_run}, verbosity={verbosity}\nstderr:\n{stderr}"
     );
+    let snapshot = harness.snapshot();
     assert_eq!(
-        harness.snapshot().pull_requests.is_empty(),
+        snapshot.pull_requests.is_empty(),
         dry_run,
         "dry_run={dry_run}, verbosity={verbosity}"
     );
+    assert!(snapshot.stacks.is_empty());
+    for pr in snapshot.pull_requests {
+        assert_eq!(pr.stack, None);
+        assert_eq!(pr.stack_position, None);
+    }
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -907,7 +945,9 @@ async fn misc() {
     assert_eq!(pr.head_ref_name, "refs/heads/users/alice/I0001");
     assert!(!pr.is_draft);
     assert_eq!(pr.comments.len(), 1);
-    assert_eq!(snapshot.stacks.values().next().unwrap(), &[1]);
+    assert!(snapshot.stacks.is_empty());
+    assert_eq!(pr.stack, None);
+    assert_eq!(pr.stack_position, None);
 
     harness.write("feature", "updated\n").unwrap();
     harness

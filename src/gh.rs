@@ -632,6 +632,9 @@ impl StackPlan {
         let (owner, name) = repo_name()?;
         let desired: Vec<u64> = prs.iter().rev().map(|pr| pr.number).collect();
         let Some(existing) = self.existing else {
+            if desired.len() < 2 {
+                return Ok(());
+            }
             return rest_api_empty(
                 "POST",
                 format!("repos/{owner}/{name}/stacks"),
