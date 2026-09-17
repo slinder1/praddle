@@ -107,7 +107,12 @@ pub struct PublicationPlan {
 impl PublicationPlan {
     pub fn build(changes: &[AnyChange], remote_refs: &RemoteRefs) -> Result<Self> {
         let repo = env::get().repo()?;
-        let mut parent_oid = remote_refs.require(&branch_ref(env::get().base_branch()))?;
+        let first = changes.last().context("cannot publish an empty stack")?;
+        // TODO: should this actually be the merge-base with the remote branch? I can't imagine a
+        // situation where someone genuinely wants to merge from a completely unrelated history, but
+        // I also can't imagine wanting to "skip" intervening commits on the path to the merge-base.
+        // maybe instead just verify that this parent is reachable from the remote base branch?
+        let mut parent_oid = repo.find_commit(first.local_change().oid)?.parent_id(0)?;
         let mut updates = Vec::with_capacity(changes.len());
 
         for change in changes.iter().rev() {

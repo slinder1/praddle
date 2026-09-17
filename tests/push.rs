@@ -529,6 +529,84 @@ async fn updates_a_change_when_it_is_edited_and_pushed_again() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn ignores_base_branch_changes_after_the_local_merge_base() {
+    let harness = TestHarness::start("alice", "widgets").await.unwrap();
+    let merge_base = harness.remote_ref_oid("refs/heads/main").unwrap().unwrap();
+    harness.write("feature", "feature\n").unwrap();
+    harness.git(["add", "feature"]).unwrap();
+    harness
+        .git(["commit", "-m", "Feature", "-m", "Change-Id: I0001"])
+        .unwrap();
+    let local_tree = git_stdout(&harness, &["rev-parse", "HEAD^{tree}"]);
+
+    harness.git(["checkout", "main"]).unwrap();
+    harness.write("unrelated", "unrelated\n").unwrap();
+    harness.git(["add", "unrelated"]).unwrap();
+    harness.git(["commit", "-m", "Unrelated change"]).unwrap();
+    harness.git(["push", "origin", "main"]).unwrap();
+    let advanced_base = harness.remote_ref_oid("refs/heads/main").unwrap().unwrap();
+    harness.git(["checkout", "change"]).unwrap();
+
+    push(&harness);
+
+    let published = harness
+        .remote_ref_oid("refs/heads/users/alice/I0001")
+        .unwrap()
+        .unwrap();
+    assert_eq!(harness.commit_tree_oid(&published).unwrap(), local_tree);
+    assert_eq!(
+        harness.commit_parent_oids(&published).unwrap(),
+        [merge_base]
+    );
+    assert!(!harness.is_ancestor(&advanced_base, &published).unwrap());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn merges_an_existing_pr_only_to_the_local_merge_base() {
+    let harness = TestHarness::start("alice", "widgets").await.unwrap();
+    harness.write("feature", "feature\n").unwrap();
+    harness.git(["add", "feature"]).unwrap();
+    harness
+        .git(["commit", "-m", "Feature", "-m", "Change-Id: I0001"])
+        .unwrap();
+    push(&harness);
+    let old_published = harness
+        .remote_ref_oid("refs/heads/users/alice/I0001")
+        .unwrap()
+        .unwrap();
+
+    harness.git(["checkout", "main"]).unwrap();
+    harness.write("first-base-change", "first\n").unwrap();
+    harness.git(["add", "first-base-change"]).unwrap();
+    harness.git(["commit", "-m", "First base change"]).unwrap();
+    let local_merge_base = git_stdout(&harness, &["rev-parse", "HEAD"]);
+    harness.git(["checkout", "change"]).unwrap();
+    harness.git(["rebase", "main"]).unwrap();
+    let local_tree = git_stdout(&harness, &["rev-parse", "HEAD^{tree}"]);
+
+    harness.git(["checkout", "main"]).unwrap();
+    harness.write("second-base-change", "second\n").unwrap();
+    harness.git(["add", "second-base-change"]).unwrap();
+    harness.git(["commit", "-m", "Second base change"]).unwrap();
+    harness.git(["push", "origin", "main"]).unwrap();
+    let remote_base = harness.remote_ref_oid("refs/heads/main").unwrap().unwrap();
+    harness.git(["checkout", "change"]).unwrap();
+
+    push(&harness);
+
+    let published = harness
+        .remote_ref_oid("refs/heads/users/alice/I0001")
+        .unwrap()
+        .unwrap();
+    assert_eq!(harness.commit_tree_oid(&published).unwrap(), local_tree);
+    assert_eq!(
+        harness.commit_parent_oids(&published).unwrap(),
+        [old_published, local_merge_base]
+    );
+    assert!(!harness.is_ancestor(&remote_base, &published).unwrap());
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn updates_descendants_with_fast_forward_merges() {
     let harness = TestHarness::start("alice", "widgets").await.unwrap();
     harness.write("first", "before\n").unwrap();
