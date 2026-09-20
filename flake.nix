@@ -48,6 +48,8 @@
           commonArgs
           // {
             inherit cargoArtifacts;
+            # FIXME: tests currently require something that is impure
+            doCheck = false;
           }
         );
       in
@@ -56,7 +58,10 @@
           inherit praddle;
         };
 
-        packages.default = praddle;
+        packages = rec {
+          inherit praddle;
+          default = praddle;
+        };
 
         devShells.default = craneLib.devShell {
           inherit cargoArtifacts;
