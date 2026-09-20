@@ -7,6 +7,7 @@ use std::process::{Command, Output};
 use tempfile::NamedTempFile;
 
 const MAX_VERBOSE_LINE_BYTES: usize = 100;
+const MAX_VERBOSE_LINES: usize = 10;
 
 fn truncate_line(line: &str) -> String {
     if line.len() <= MAX_VERBOSE_LINE_BYTES {
@@ -26,13 +27,35 @@ fn truncate_line(line: &str) -> String {
     format!("{}{}{}", &line[..prefix_end], marker, &line[suffix_start..])
 }
 
+fn output_lines(output: &[u8], truncate: bool) -> Vec<String> {
+    let output = String::from_utf8_lossy(output);
+    let lines: Vec<_> = output.lines().collect();
+    if !truncate || lines.len() <= MAX_VERBOSE_LINES {
+        return lines
+            .into_iter()
+            .map(|line| {
+                if truncate {
+                    truncate_line(line)
+                } else {
+                    line.to_owned()
+                }
+            })
+            .collect();
+    }
+
+    let leading_lines = (MAX_VERBOSE_LINES - 1) / 2;
+    let trailing_lines = MAX_VERBOSE_LINES - leading_lines - 1;
+    lines[..leading_lines]
+        .iter()
+        .copied()
+        .chain(std::iter::once("[...]"))
+        .chain(lines[lines.len() - trailing_lines..].iter().copied())
+        .map(truncate_line)
+        .collect()
+}
+
 fn print_output(prefix: &str, output: &[u8], truncate: bool) {
-    for line in String::from_utf8_lossy(output).lines() {
-        let line = if truncate {
-            truncate_line(line)
-        } else {
-            line.to_owned()
-        };
+    for line in output_lines(output, truncate) {
         eprintln!("{prefix}{line}");
     }
 }
@@ -51,7 +74,7 @@ where
             eprintln!(
                 "file-contents-{}: {}",
                 file.path().display(),
-                String::from_utf8_lossy(&contents)
+                output_lines(&contents, env.verbosity() <= 1).join("\n")
             );
         }
     }
@@ -105,5 +128,49 @@ impl<T, E: Debug> Extract for std::result::Result<T, E> {
                 std::process::exit(-1);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn verbose_output_keeps_up_to_ten_lines() {
+        let output = (1..=10)
+            .map(|line| line.to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert_eq!(
+            output_lines(output.as_bytes(), true),
+            (1..=10).map(|line| line.to_string()).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn verbose_output_elides_middle_lines() {
+        let output = (1..=12)
+            .map(|line| line.to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert_eq!(
+            output_lines(output.as_bytes(), true),
+            ["1", "2", "3", "4", "[...]", "8", "9", "10", "11", "12"]
+        );
+    }
+
+    #[test]
+    fn very_verbose_output_keeps_all_lines() {
+        let output = (1..=12)
+            .map(|line| line.to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert_eq!(
+            output_lines(output.as_bytes(), false),
+            (1..=12).map(|line| line.to_string()).collect::<Vec<_>>()
+        );
     }
 }
