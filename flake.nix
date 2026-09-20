@@ -48,6 +48,8 @@
           commonArgs
           // {
             inherit cargoArtifacts;
+            # FIXME: tests currently require something that is impure
+            doCheck = false;
           }
         );
       in
@@ -62,7 +64,7 @@
           inherit cargoArtifacts;
           checks = self.checks.${system};
           packages = with pkgs; [
-            gh
+            praddle
           ];
         };
 
