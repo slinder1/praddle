@@ -24,13 +24,13 @@ jobs:
     name: nix flake check
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v7
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@v23
-      - name: Magic Nix Cache
+      - name: Cache Nix
         uses: DeterminateSystems/magic-nix-cache-action@v15
         with:
           use-flakehub: false
-      - name: Run Nix Checks
+      - name: Check Nix Flake
         run: nix flake check
