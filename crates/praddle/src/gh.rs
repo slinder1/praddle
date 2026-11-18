@@ -397,16 +397,18 @@ impl Pr {
 
     pub fn add_details_comment(&self, diff: &Diff) -> Result<()> {
         let (summary, changes) = match diff {
-            Diff::InitialDiff(text) => ("Initial changes", text),
-            Diff::InterDiff(text) => ("Changes since last version", text),
+            Diff::InitialDiff(contents) => ("Initial changes", contents),
+            Diff::InterDiff(contents) => ("Changes since last version", contents),
         };
-        if changes.is_empty() {
+        if changes.text.is_empty() {
             return Ok(());
         }
-        let code_block = markdown_code_block("diff", changes);
-        let comment = format!(
-            "<details>\n<summary>🛠️ {summary} (click to expand):</summary>\n\n{code_block}\n</details>"
-        );
+        let details = |body| {
+            format!(
+                "<details>\n<summary>🛠️ {summary} (click to expand):</summary>\n\n{body}\n</details>"
+            )
+        };
+        let mut comment = details(markdown_code_block("diff", &changes.text));
         let bytes = comment.len();
         if bytes > MAX_COMMENT_BYTES {
             let (owner, repo) = repo_name()?;
@@ -416,27 +418,35 @@ impl Pr {
             );
             if env::get().dry_run() {
                 eprintln!("dry run: oversized comment was not saved");
-                return Ok(());
+            } else {
+                let directory = dirs::state_dir()
+                    .context("could not locate state directory for oversized comment")?
+                    .join("praddle/comments");
+                std::fs::create_dir_all(&directory).with_context(|| {
+                    format!(
+                        "could not create comment directory: {}",
+                        directory.display()
+                    )
+                })?;
+                let mut file = tempfile::Builder::new()
+                    .prefix(&format!("{owner}-{repo}-pr-{}-", self.number))
+                    .suffix(".md")
+                    .tempfile_in(&directory)
+                    .context("could not create file for oversized comment")?;
+                file.write_all(comment.as_bytes())
+                    .context("could not write oversized comment")?;
+                let (_, path) = file.keep().context("could not retain oversized comment")?;
+                eprintln!("comment saved to: {}", path.display());
             }
-            let directory = dirs::state_dir()
-                .context("could not locate state directory for oversized comment")?
-                .join("praddle/comments");
-            std::fs::create_dir_all(&directory).with_context(|| {
-                format!(
-                    "could not create comment directory: {}",
-                    directory.display()
-                )
-            })?;
-            let mut file = tempfile::Builder::new()
-                .prefix(&format!("{owner}-{repo}-pr-{}-", self.number))
-                .suffix(".md")
-                .tempfile_in(&directory)
-                .context("could not create file for oversized comment")?;
-            file.write_all(comment.as_bytes())
-                .context("could not write oversized comment")?;
-            let (_, path) = file.keep().context("could not retain oversized comment")?;
-            eprintln!("comment saved to: {}", path.display());
-            return Ok(());
+            for stats in [&changes.stat, &changes.shortstat] {
+                let code_block = markdown_code_block("text", stats);
+                comment = details(format!(
+                    "This change is too large to post the diff: the full comment is {bytes} bytes, exceeding GitHub's {MAX_COMMENT_BYTES}-byte limit.\n\n{code_block}"
+                ));
+                if comment.len() <= MAX_COMMENT_BYTES {
+                    break;
+                }
+            }
         }
         let mut body_arg = ArgInlineOrFile::new("body");
         let mut cmd = gh();

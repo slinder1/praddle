@@ -4,13 +4,14 @@ See `--help` for details.
 
 # Oversized Comments
 
-Comments exceeding GitHub's 65,536-byte UTF-8 limit are not posted. Praddle
-instead saves the complete Markdown to
+When a diff comment exceeds GitHub's 65,536-byte UTF-8 limit, Praddle posts
+a size-limit notice and diffstat instead. If the diffstat also exceeds the
+limit, only file and line totals are posted. Praddle saves the complete Markdown to
 `$XDG_STATE_HOME/praddle/comments` (default: `~/.local/state/praddle/comments`)
 and prints a warning and the saved file's path. Filenames include the repository
 owner, repository name, PR number, and a unique suffix so earlier comments are
-not overwritten. The push continues normally if the comment is saved. Dry runs
-only warn and do not save files.
+not overwritten. The push continues normally after saving the full comment and
+posting the summary. Dry runs preview the summary without posting or saving files.
 
 # Etymology
 
