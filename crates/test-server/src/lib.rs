@@ -586,7 +586,8 @@ fn graphql(state: &AppState, body: &[u8]) -> HttpResult {
         .get("variables")
         .cloned()
         .unwrap_or_else(|| json!({}));
-    for key in ["owner"] {
+    {
+        let key = "owner";
         if variables
             .get(key)
             .and_then(Value::as_str)

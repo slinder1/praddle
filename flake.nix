@@ -65,7 +65,20 @@
       {
         checks = {
           inherit praddle;
-          my-workspace-nextest = craneLib.cargoNextest (
+          clippy = craneLib.cargoClippy (
+            commonArgs
+            // {
+              inherit cargoArtifacts;
+              cargoClippyExtraArgs = "--all-targets -- -D warnings";
+            }
+          );
+          fmt = craneLib.cargoFmt (
+            commonArgs
+            // {
+              inherit src;
+            }
+          );
+          nextest = craneLib.cargoNextest (
             commonArgs
             // {
               inherit cargoArtifacts;
@@ -74,7 +87,7 @@
               cargoNextestPartitionsExtraArgs = "--no-tests=pass";
             }
           );
-          my-workspace-hakari = craneLib.mkCargoDerivation (
+          hakari = craneLib.mkCargoDerivation (
             commonArgs
             // {
               inherit src;
