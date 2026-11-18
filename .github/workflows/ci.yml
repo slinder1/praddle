@@ -8,31 +8,29 @@ on:
   merge_group:
     branches: [ "main" ]
 
+concurrency:
+  # Cancel in-progress runs when a PR branch is updated.
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
 permissions:
   # for actions/checkout
   contents: read
-
-env:
-  CARGO_TERM_COLOR: always
-  RUST_BACKTRACE: 1
-  RUSTFLAGS: -Dwarnings
+  # for cache
+  id-token: write
 
 jobs:
-  build:
-    name: build
+  check:
+    name: nix flake check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v23
+      - name: Cache Nix
+        uses: DeterminateSystems/magic-nix-cache-action@v15
         with:
-          components: clippy,rustfmt
-      - name: Format
-        uses: actions-rust-lang/rustfmt@v1
-      - name: Clippy
-        run: cargo clippy
-      - name: Check
-        run: cargo check --verbose
-      - name: Build
-        run: cargo build --verbose
-      - name: Test
-        run: cargo test --verbose
+          use-flakehub: false
+      - name: Check Nix Flake
+        run: nix flake check

@@ -1,5 +1,4 @@
-/target
-/out
-/cgh
-/gen
+target/
+out/
+gen/
 /praddle.toml
