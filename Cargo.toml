@@ -1,6 +1,6 @@
 [package]
 name = "praddle"
-version = "0.14.0"
+version = "0.15.0"
 license = "MIT"
 edition = "2024"
 description = "GitHub stacked-PR builder for those who miss Gerrit"
