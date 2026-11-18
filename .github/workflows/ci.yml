@@ -33,4 +33,4 @@ jobs:
         with:
           use-flakehub: false
       - name: Check Nix Flake
-        run: nix flake check
+        run: nix flake check --verbose --print-build-logs --fallback --keep-going
