@@ -436,6 +436,7 @@ impl Pr {
                 file.write_all(comment.as_bytes())
                     .context("could not write oversized comment")?;
                 let (_, path) = file.keep().context("could not retain oversized comment")?;
+                // asdf
                 eprintln!("comment saved to: {}", path.display());
             }
             for stats in [&changes.stat, &changes.shortstat] {
