@@ -55,6 +55,8 @@ fn gh() -> Command {
 /// too long. Anything longer than this will use a tempfile.
 const MAX_INLINE_ARG_LENGTH: usize = 0x1000;
 
+const MAX_COMMENT_BYTES: usize = 65_536;
+
 struct ArgInlineOrFile {
     arg_base: &'static str,
     file: Option<NamedTempFile>,
@@ -405,6 +407,37 @@ impl Pr {
         let comment = format!(
             "<details>\n<summary>🛠️ {summary} (click to expand):</summary>\n\n{code_block}\n</details>"
         );
+        let bytes = comment.len();
+        if bytes > MAX_COMMENT_BYTES {
+            let (owner, repo) = repo_name()?;
+            eprintln!(
+                "warning: comment for {owner}/{repo}#{} could not be posted: {bytes} bytes exceeds GitHub's limit of {MAX_COMMENT_BYTES} bytes",
+                self.number,
+            );
+            if env::get().dry_run() {
+                eprintln!("dry run: oversized comment was not saved");
+                return Ok(());
+            }
+            let directory = dirs::state_dir()
+                .context("could not locate state directory for oversized comment")?
+                .join("praddle/comments");
+            std::fs::create_dir_all(&directory).with_context(|| {
+                format!(
+                    "could not create comment directory: {}",
+                    directory.display()
+                )
+            })?;
+            let mut file = tempfile::Builder::new()
+                .prefix(&format!("{owner}-{repo}-pr-{}-", self.number))
+                .suffix(".md")
+                .tempfile_in(&directory)
+                .context("could not create file for oversized comment")?;
+            file.write_all(comment.as_bytes())
+                .context("could not write oversized comment")?;
+            let (_, path) = file.keep().context("could not retain oversized comment")?;
+            eprintln!("comment saved to: {}", path.display());
+            return Ok(());
+        }
         let mut body_arg = ArgInlineOrFile::new("body");
         let mut cmd = gh();
         let args = self.args_for("comment", [body_arg.arg(comment)?])?;

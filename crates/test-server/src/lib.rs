@@ -695,7 +695,7 @@ fn graphql(state: &AppState, body: &[u8]) -> HttpResult {
         let number = id_number(input.get("subjectId"));
         let mut model = state.model.lock().unwrap();
         let pr = get_pr_mut(&mut model, number)?;
-        pr.comments.push(string(input, "body"));
+        pr.comments.push(comment_body(input)?);
         return json_response(
             StatusCode::OK,
             &json!({ "data": { "addComment": { "commentEdge": { "node": { "url": format!("{}#issuecomment-{}", pr_url(state, number), pr.comments.len()) } } } } }),
@@ -893,7 +893,7 @@ fn rest_api(state: &AppState, method: Method, path: &str, body: &[u8]) -> HttpRe
             let request: Value = serde_json::from_slice(body).map_err(bad_json)?;
             let mut model = state.model.lock().unwrap();
             let pr = get_pr_mut(&mut model, number)?;
-            pr.comments.push(string(&request, "body"));
+            pr.comments.push(comment_body(&request)?);
             return json_response(
                 StatusCode::CREATED,
                 &json!({ "id": pr.comments.len(), "html_url": format!("{}#issuecomment-{}", pr_url(state, number), pr.comments.len()) }),
@@ -999,6 +999,17 @@ fn json_response(status: StatusCode, value: &Value) -> HttpResult {
         .headers_mut()
         .insert("content-type", HeaderValue::from_static("application/json"));
     Ok(response)
+}
+
+fn comment_body(value: &Value) -> Result<String, (StatusCode, String)> {
+    let body = string(value, "body");
+    if body.len() > 65_536 {
+        return Err((
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "comment body exceeds 65536 bytes".into(),
+        ));
+    }
+    Ok(body)
 }
 
 fn string(value: &Value, key: &str) -> String {

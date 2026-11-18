@@ -79,6 +79,130 @@ fn local_refs(harness: &TestHarness) -> String {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn posts_a_comment_at_the_byte_limit() {
+    let harness = TestHarness::start("alice", "widgets").await.unwrap();
+    let state = tempfile::tempdir().unwrap();
+    let contents = format!(
+        "\u{00e9}{}",
+        "x".repeat(65_536 - initial_comment("change", "").len() - "\u{00e9}".len())
+    );
+    let expected = initial_comment("change", &contents);
+    assert_eq!(expected.len(), 65_536);
+    assert!(expected.chars().count() < 65_536);
+    harness.write("change", format!("{contents}\n")).unwrap();
+    harness.git(["add", "change"]).unwrap();
+    harness
+        .git(["commit", "-m", "Large change", "-m", "Change-Id: I0001"])
+        .unwrap();
+
+    let output = harness
+        .command(env!("CARGO_BIN_EXE_praddle"))
+        .env("XDG_STATE_HOME", state.path())
+        .args([
+            "--remote=origin",
+            "--base-branch=main",
+            "--user-branch-prefix=users/alice/",
+            "push",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(harness.snapshot().pull_requests[0].comments, [expected]);
+    assert!(!state.path().join("praddle").exists());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn saves_oversized_comments_without_posting_them() {
+    let harness = TestHarness::start("alice", "widgets").await.unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let state = home.path().join(".local/state");
+    let contents = "x".repeat(65_537 - initial_comment("change", "").len());
+    let initial = initial_comment("change", &contents);
+    assert_eq!(initial.len(), 65_537);
+    assert!(initial.chars().count() < 65_536);
+    harness.write("change", format!("{contents}\n")).unwrap();
+    harness.git(["add", "change"]).unwrap();
+    harness
+        .git(["commit", "-m", "Large change", "-m", "Change-Id: I0001"])
+        .unwrap();
+
+    let command = || {
+        let mut command = harness.command(env!("CARGO_BIN_EXE_praddle"));
+        command.env("XDG_STATE_HOME", &state).args([
+            "--remote=origin",
+            "--base-branch=main",
+            "--user-branch-prefix=users/alice/",
+            "push",
+        ]);
+        command
+    };
+    let output = command().arg("--dry-run").output().unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("65536"), "{stderr}");
+    assert!(!state.exists());
+    assert!(harness.snapshot().pull_requests.is_empty());
+
+    let mut saved = Vec::new();
+    for (expected, use_home) in [
+        (initial, false),
+        (
+            interdiff_comment("change", &contents, &contents.replace('x', "y")),
+            true,
+        ),
+    ] {
+        let mut command = command();
+        if use_home {
+            let updated = contents.replace('x', "y");
+            harness.write("change", format!("{updated}\n")).unwrap();
+            harness.git(["add", "change"]).unwrap();
+            harness.git(["commit", "--amend", "--no-edit"]).unwrap();
+            command
+                .env_remove("XDG_STATE_HOME")
+                .env("HOME", home.path());
+        }
+        let output = command.output().unwrap();
+        assert!(output.status.success(), "{output:?}");
+        let stderr = String::from_utf8(output.stderr).unwrap();
+        assert!(stderr.contains("warning:"), "{stderr}");
+        assert!(stderr.contains("could not be posted"), "{stderr}");
+        assert!(stderr.contains("65536"), "{stderr}");
+        let files: Vec<_> = std::fs::read_dir(state.join("praddle/comments"))
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .filter(|path| !saved.contains(path))
+            .collect();
+        assert_eq!(files.len(), 1);
+        let path = &files[0];
+        assert!(
+            path.file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .starts_with("alice-widgets-pr-1-")
+        );
+        assert_eq!(path.extension().unwrap(), "md");
+        assert!(stderr.contains(path.to_str().unwrap()), "{stderr}");
+        assert_eq!(std::fs::read_to_string(path).unwrap(), expected);
+        saved.push(path.clone());
+        let snapshot = harness.snapshot();
+        assert_eq!(snapshot.pull_requests.len(), 1);
+        let pr = &snapshot.pull_requests[0];
+        assert!(pr.comments.is_empty());
+        assert!(!pr.is_draft);
+        assert!(
+            harness
+                .remote_ref_exists("refs/heads/users/alice/I0001")
+                .unwrap()
+        );
+    }
+    assert_eq!(
+        std::fs::read_to_string(&saved[0]).unwrap(),
+        initial_comment("change", &contents)
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn ignores_duplicate_change_ids_outside_the_current_stack() {
     let harness = TestHarness::start("alice", "widgets").await.unwrap();
     harness

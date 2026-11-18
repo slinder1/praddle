@@ -2,6 +2,16 @@ GitHub stacked-PR builder for those who miss Gerrit
 
 See `--help` for details.
 
+# Oversized Comments
+
+Comments exceeding GitHub's 65,536-byte UTF-8 limit are not posted. Praddle
+instead saves the complete Markdown to
+`$XDG_STATE_HOME/praddle/comments` (default: `~/.local/state/praddle/comments`)
+and prints a warning and the saved file's path. Filenames include the repository
+owner, repository name, PR number, and a unique suffix so earlier comments are
+not overwritten. The push continues normally if the comment is saved. Dry runs
+only warn and do not save files.
+
 # Etymology
 
 <sub>(*Note:* This project was previously named `gd` and then `cgh`)</sub>
