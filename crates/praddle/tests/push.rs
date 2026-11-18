@@ -112,7 +112,7 @@ async fn posts_a_comment_at_the_byte_limit() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn saves_oversized_comments_without_posting_them() {
+async fn saves_oversized_comments_and_posts_diffstats() {
     let harness = TestHarness::start("alice", "widgets").await.unwrap();
     let home = tempfile::tempdir().unwrap();
     let state = home.path().join(".local/state");
@@ -140,6 +140,7 @@ async fn saves_oversized_comments_without_posting_them() {
     assert!(output.status.success(), "{output:?}");
     let stderr = String::from_utf8(output.stderr).unwrap();
     assert!(stderr.contains("65536"), "{stderr}");
+    assert!(stderr.contains("too large to post the diff"), "{stderr}");
     assert!(!state.exists());
     assert!(harness.snapshot().pull_requests.is_empty());
 
@@ -188,7 +189,23 @@ async fn saves_oversized_comments_without_posting_them() {
         let snapshot = harness.snapshot();
         assert_eq!(snapshot.pull_requests.len(), 1);
         let pr = &snapshot.pull_requests[0];
-        assert!(pr.comments.is_empty());
+        assert_eq!(pr.comments.len(), saved.len());
+        let comment = pr.comments.last().unwrap();
+        assert!(comment.len() <= 65_536);
+        assert!(comment.contains("too large to post the diff"), "{comment}");
+        assert!(comment.contains("65536"), "{comment}");
+        assert!(comment.contains("change |"), "{comment}");
+        assert!(
+            comment.contains("1 file changed, 1 insertion(+)"),
+            "{comment}"
+        );
+        if use_home {
+            assert!(comment.contains("Changes since last version"), "{comment}");
+            assert!(comment.contains("1 deletion(-)"), "{comment}");
+        } else {
+            assert!(comment.contains("Initial changes"), "{comment}");
+            assert!(!comment.contains("deletion"), "{comment}");
+        }
         assert!(!pr.is_draft);
         assert!(
             harness
@@ -200,6 +217,43 @@ async fn saves_oversized_comments_without_posting_them() {
         std::fs::read_to_string(&saved[0]).unwrap(),
         initial_comment("change", &contents)
     );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn posts_totals_when_even_the_diffstat_is_too_large() {
+    let harness = TestHarness::start("alice", "widgets").await.unwrap();
+    let state = tempfile::tempdir().unwrap();
+    for index in 0..1_000 {
+        let path = format!("{index:04}-{}", "x".repeat(100));
+        harness.write(&path, "content\n").unwrap();
+    }
+    harness.git(["add", "."]).unwrap();
+    harness
+        .git(["commit", "-m", "Many files", "-m", "Change-Id: I0001"])
+        .unwrap();
+    let output = harness
+        .command(env!("CARGO_BIN_EXE_praddle"))
+        .env("XDG_STATE_HOME", state.path())
+        .args([
+            "--remote=origin",
+            "--base-branch=main",
+            "--user-branch-prefix=users/alice/",
+            "push",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let snapshot = harness.snapshot();
+    let comments = &snapshot.pull_requests[0].comments;
+    assert_eq!(comments.len(), 1);
+    let comment = &comments[0];
+    assert!(comment.len() <= 65_536);
+    assert!(comment.contains("too large to post the diff"), "{comment}");
+    assert!(
+        comment.contains("1000 files changed, 1000 insertions(+)"),
+        "{comment}"
+    );
+    assert!(!comment.contains("0000-"), "{comment}");
 }
 
 #[tokio::test(flavor = "multi_thread")]

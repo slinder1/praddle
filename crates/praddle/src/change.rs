@@ -40,8 +40,29 @@ impl AnyChange {
 }
 
 pub enum Diff {
-    InitialDiff(String),
-    InterDiff(String),
+    InitialDiff(DiffContents),
+    InterDiff(DiffContents),
+}
+
+pub struct DiffContents {
+    pub text: String,
+    pub stat: String,
+    pub shortstat: String,
+}
+
+impl DiffContents {
+    fn from_diff(diff: git2::Diff<'_>) -> Result<Self> {
+        let mut text = String::new();
+        diff.print(DiffFormat::Patch, diff_printer(&mut text))?;
+        let stats = diff.stats()?;
+        Ok(Self {
+            text,
+            stat: String::from_utf8_lossy(&stats.to_buf(git2::DiffStatsFormat::FULL, 80)?)
+                .into_owned(),
+            shortstat: String::from_utf8_lossy(&stats.to_buf(git2::DiffStatsFormat::SHORT, 80)?)
+                .into_owned(),
+        })
+    }
 }
 
 type DiffPrinter<'a> = Box<dyn FnMut(DiffDelta, Option<DiffHunk>, DiffLine) -> bool + 'a>;
@@ -83,7 +104,7 @@ impl LocalChange {
     pub fn remote_branch_ref(&self) -> String {
         format!("refs/heads/{}", self.remote_branch())
     }
-    pub fn diff(&self) -> Result<String> {
+    pub fn diff(&self) -> Result<DiffContents> {
         let change = self.id.as_str();
         let repo = env::get().repo()?;
         let commit = self.commit()?;
@@ -97,10 +118,8 @@ impl LocalChange {
             Some(&tree(&parent)?),
             Some(&mut diff_opts),
         )?;
-        let mut out = String::new();
-        diff.print(DiffFormat::Patch, diff_printer(&mut out))
-            .with_context(|| format!("failed to generate interdiff for change {change}"))?;
-        Ok(out)
+        DiffContents::from_diff(diff)
+            .with_context(|| format!("failed to generate diff for change {change}"))
     }
     pub fn commit(&self) -> Result<Commit<'_>> {
         Ok(env::get().repo()?.find_commit(self.oid)?)
@@ -115,7 +134,7 @@ pub struct Change {
 
 impl Change {
     /// Adapted from https://joshcannon.me/2025/04/05/pr-interdiff.html
-    pub fn interdiff(&self, remote_refs: &RemoteRefs) -> Result<String> {
+    pub fn interdiff(&self, remote_refs: &RemoteRefs) -> Result<DiffContents> {
         let change = self.local_change.id.as_str();
         let repo = env::get().repo()?;
         let remote_branch = self.local_change.remote_branch_ref();
@@ -150,10 +169,8 @@ impl Change {
             Some(&merge_idx),
             Some(&mut diff_opts),
         )?;
-        let mut out = String::new();
-        diff.print(DiffFormat::Patch, diff_printer(&mut out))
-            .with_context(|| format!("failed to generate interdiff for change {change}"))?;
-        Ok(out)
+        DiffContents::from_diff(diff)
+            .with_context(|| format!("failed to generate interdiff for change {change}"))
     }
 }
 
