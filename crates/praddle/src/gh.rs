@@ -440,7 +440,6 @@ impl Pr {
             }
             for stats in [&changes.stat, &changes.shortstat] {
                 let code_block = markdown_code_block("text", stats);
-                // foo
                 comment = details(format!(
                     "This change is too large to post the diff: the full comment is {bytes} bytes, exceeding GitHub's {MAX_COMMENT_BYTES}-byte limit.\n\n{code_block}"
                 ));
