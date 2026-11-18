@@ -11,6 +11,8 @@ on:
 permissions:
   # for actions/checkout
   contents: read
+  # for cache
+  id-token: write
 
 jobs:
   check:
@@ -20,8 +22,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@v14
+        uses: DeterminateSystems/nix-installer-action@v23
       - name: Magic Nix Cache
-        uses: DeterminateSystems/magic-nix-cache-action@v2
+        uses: DeterminateSystems/magic-nix-cache-action@v15
       - name: Run Nix Checks
         run: nix flake check
