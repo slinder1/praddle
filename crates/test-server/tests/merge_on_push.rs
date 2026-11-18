@@ -40,6 +40,11 @@ async fn marks_a_pull_request_merged_when_its_head_is_reachable_from_its_base() 
 
     harness.git(["checkout", "main"]).unwrap();
     harness.git(["merge", "--ff-only", "change"]).unwrap();
-    harness.git(["push", "origin", "main"]).unwrap();
-    assert_eq!(harness.snapshot().pull_requests[0].state, "MERGED");
+    let output = harness.git(["push", "origin", "main"]).unwrap();
+    assert_eq!(
+        harness.snapshot().pull_requests[0].state,
+        "MERGED",
+        "git push stderr:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 }

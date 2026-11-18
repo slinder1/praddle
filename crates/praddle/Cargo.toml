@@ -1,0 +1,41 @@
+[package]
+name = "praddle"
+version = "0.15.0"
+license = "MIT"
+edition = "2024"
+description = "GitHub stacked-PR builder for those who miss Gerrit"
+build = "build.rs"
+
+[package.metadata.deb]
+maintainer = "Scott Linder"
+copyright = "AMD"
+assets = [
+    ["target/release/praddle", "usr/bin/praddle", "755"],
+    ["gen/*.1", "usr/share/man/man1/", "644"],
+    ["gen/praddle.bash", "usr/share/bash-completion/completions/praddle", "644"],
+    ["gen/praddle.fish", "usr/share/fish/vendor_completions.d/praddle", "644"],
+    ["gen/_praddle", "usr/share/zsh/vendor-completions/_praddle", "644"],
+]
+
+[build-dependencies]
+clap = { version = "4.6.0", features = ["derive"] }
+clap_complete = "4.6.2"
+clap_mangen = "0.3.0"
+
+[dependencies]
+anyhow = "1.0.102"
+atomic-counter = "1.0.1"
+clap = { version = "4.6.0", features = ["derive"] }
+dirs = "6.0.0"
+git2 = { version = "0.21.0", features = ["ssh"] }
+rayon = "1.12.0"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+tempfile = "3.27.0"
+thread_local = "1.1.9"
+toml = "1.1.2"
+workspace-hack.workspace = true
+
+[dev-dependencies]
+praddle-test-server.workspace = true
+tokio = { version = "1.50.0", features = ["macros", "rt-multi-thread"] }

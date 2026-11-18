@@ -770,6 +770,7 @@ dependencies = [
  "thread_local",
  "tokio",
  "toml",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -783,6 +784,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -1260,6 +1262,22 @@ name = "winnow"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8c3b93199df0ab874cdf0c6a94f0a0dc3423fe41f1cafb62b8bd7b1deb277aef"
+
+[[package]]
+name = "workspace-hack"
+version = "0.1.0"
+dependencies = [
+ "form_urlencoded",
+ "memchr",
+ "once_cell",
+ "percent-encoding",
+ "proc-macro2",
+ "quote",
+ "serde_core",
+ "serde_json",
+ "smallvec",
+ "syn",
+]
 
 [[package]]
 name = "writeable"
