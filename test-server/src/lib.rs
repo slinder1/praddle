@@ -259,6 +259,10 @@ impl TestHarness {
     {
         let mut command = self.command("git");
         command.args(args);
+        // FIXME: rather than re-committing to reproduce commits, tests could build a new branch
+        // referencing old commits
+        command.env("GIT_AUTHOR_DATE", "2026-11-18T12:00:00");
+        command.env("GIT_COMMITTER_DATE", "2026-11-18T12:00:00");
         checked_output(&mut command)
     }
 

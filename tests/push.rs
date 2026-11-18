@@ -70,7 +70,11 @@ fn git_stdout(harness: &TestHarness, args: &[&str]) -> String {
 fn local_refs(harness: &TestHarness) -> String {
     git_stdout(
         harness,
-        &["for-each-ref", "--format=%(refname) %(objectname)"],
+        &[
+            "for-each-ref",
+            "refs/heads",
+            "--format=%(refname) %(objectname)",
+        ],
     )
 }
 
