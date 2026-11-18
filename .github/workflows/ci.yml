@@ -16,8 +16,6 @@ concurrency:
 permissions:
   # for actions/checkout
   contents: read
-  # for cache
-  id-token: write
 
 jobs:
   check:
@@ -28,9 +26,36 @@ jobs:
         uses: actions/checkout@v7
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@v23
-      - name: Cache Nix
-        uses: DeterminateSystems/magic-nix-cache-action@v15
+      - name: Identify Dependency Derivation
+        id: deps
+        run: |
+          drv=$(nix eval --raw .#deps.drvPath)
+          out=$(nix eval --raw .#deps.outPath)
+          printf 'key=praddle-deps-v1-%s\nout=%s\n' "${drv##*/}" "$out" >> "$GITHUB_OUTPUT"
+      - name: Restore Dependency Cache
+        id: deps-cache
+        uses: actions/cache/restore@v6
         with:
-          use-flakehub: false
+          path: ${{ runner.temp }}/praddle-deps-cache
+          key: ${{ steps.deps.outputs.key }}
+      - name: Import Dependency Output
+        if: steps.deps-cache.outputs.cache-hit == 'true'
+        env:
+          DEPS_OUTPUT: ${{ steps.deps.outputs.out }}
+        # GitHub's cache scope determines which producers are trusted here.
+        run: nix copy --no-check-sigs --from "file://$RUNNER_TEMP/praddle-deps-cache" "$DEPS_OUTPUT"
+      - name: Build and Export Dependency Output
+        if: steps.deps-cache.outputs.cache-hit != 'true'
+        env:
+          DEPS_OUTPUT: ${{ steps.deps.outputs.out }}
+        run: |
+          nix build --no-link --print-build-logs .#deps
+          nix copy --to "file://$RUNNER_TEMP/praddle-deps-cache" "$DEPS_OUTPUT"
+      - name: Save Dependency Cache
+        if: steps.deps-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/praddle-deps-cache
+          key: ${{ steps.deps.outputs.key }}
       - name: Check Nix Flake
         run: nix flake check --verbose --print-build-logs --fallback --keep-going

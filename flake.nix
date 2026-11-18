@@ -72,12 +72,7 @@
               cargoClippyExtraArgs = "--all-targets -- -D warnings";
             }
           );
-          fmt = craneLib.cargoFmt (
-            commonArgs
-            // {
-              inherit src;
-            }
-          );
+          fmt = craneLib.cargoFmt commonArgs;
           nextest = craneLib.cargoNextest (
             commonArgs
             // {
@@ -90,7 +85,6 @@
           hakari = craneLib.mkCargoDerivation (
             commonArgs
             // {
-              inherit src;
               cargoArtifacts = null;
               doInstallCargoArtifacts = false;
 
@@ -105,13 +99,13 @@
 
         packages = rec {
           inherit praddle;
+          deps = cargoArtifacts;
           default = praddle;
         };
 
         devShells.default = craneLib.devShell {
-          inherit cargoArtifacts;
-          checks = self.checks.${system};
-          packages = commonArgs.nativeBuildInputs;
+          inherit cargoArtifacts src;
+          inputsFrom = [ praddle ];
         };
 
         formatter = pkgs.nixfmt-tree;
